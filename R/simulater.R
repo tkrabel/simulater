@@ -1,24 +1,4 @@
-##
-##                            DATA_SIMULATER
-##
-
-# :arg n_obs:        number of observations to generate
-# :arg n_vars:       number of variables
-# :arg n_noise:      number of noise variables
-# :arg n_components: number of components in the formula
-# :arg max_order:    highest interaction order in the formula
-# :arg funs:         named list with the functions you want to apply to features
-# :arg fun_prob:     probability that a function will be applied to a picked
-#                    feature
-# :arg fun_weight:   vector with probability weights (default: equal weights)
-# :arg stn:          signal to noise ratio (computed with Friedman 2001)
-
-# Libs
-library(magrittr)
-library(dplyr)
-library(purrr)
-
-#' Title
+#' Function to create data from arbitrary non-linear DGP
 #'
 #' @param n_obs number of observations that shall be created
 #' @param n_vars number of inputs of the DGP
@@ -50,6 +30,10 @@ simulater <- function(n_obs,
                       fun_prob) {
 
   # args
+  # Libs
+  library(magrittr)
+  library(dplyr)
+  library(purrr)
   funs <- list(pow2 = function(x) return(x^2),
                pow3 = function(x) return(x^3),
                sin = sin,
@@ -101,7 +85,8 @@ simulater <- function(n_obs,
   true_y <- eval(parse(text = command))
 
   # Change Formulo better reflect R formulas
-  form_x <- form_x gsub(x = ., pat = "funs\\$", repl = "") %>%
+  form_x <- form_x %>%
+    gsub(x = ., pat = "funs\\$", repl = "") %>%
     gsub(x = ., pat = "\\*", repl = ":")
 
   # Noise: stn
