@@ -56,22 +56,27 @@ simulater <- function(n_obs,
     map(., function(fun_name) { sprintf("funs$%s(%s)", fun_name, x_cols) }) %>%
     do.call(c, .)
   feature_names <- c(x_cols, feature_names)
-  n_features <- length(feature_names)
+  n_features    <- length(feature_names)
 
   # Compute the weights of identity functions to have 50% change of being drawn
   iweight <- (1 - fun_prob) / fun_prob * sum(fun_weights)
-  pweight <- c(iweight, fun_weights) %>% rep(., each = n_vars)
+  pweight <- c(iweight, fun_weights) %>%
+    rep(., each = n_vars)
 
   # Extract the number of draws per formula component
   orders <- c(max_order, sample(seq_len(max_order), n_components - 1, TRUE))
-  coefs <- runif(n_components, -1, 1) %>% round(., 2)
-  draws <- map2(.x = orders, .y = seq_len(length(orders)), function(order, i) {
-    draw <- if (i <= n_vars) {
-      c(i, sample(seq_len(n_features)[-i], order - 1, prob = pweight[-i]))
-    } else {
-      sample(seq_len(n_features), order, prob = pweight)
+  coefs  <- runif(n_components, -1, 1) %>% round(., 2)
+  draws  <- map2(
+    .x = orders,
+    .y = seq_len(length(orders)),
+    function(order, i) {
+      draw <- if (i <= n_vars) {
+        c(i, sample(seq_len(n_features)[-i], order - 1, prob = pweight[-i]))
+      } else {
+        sample(seq_len(n_features), order, prob = pweight)
+      }
     }
-  })
+  )
 
   # Construct formula
   form_x <- draws %>%
@@ -86,7 +91,9 @@ simulater <- function(n_obs,
 
   # Change Formulo better reflect R formulas
   form_x <- form_x %>%
-    gsub(x = ., pat = "funs\\$", repl = "") %>%
+    gsub(x = ., pat = "funs\\$", repl = "I(") %>%         # Wrap functions in I()
+    gsub(x = ., pat = ")", repl = "))") %>%
+    gsub("(?<=^|\\+ )[^\\*]+\\*", "", ., perl = TRUE) %>% # Remove coefficients
     gsub(x = ., pat = "\\*", repl = ":")
 
   # Noise: stn
@@ -98,14 +105,7 @@ simulater <- function(n_obs,
 
   # Create noise
   mat_noise <- matrix(rnorm(n_obs*n_noise), ncol = n_noise) %>%
-    set_colnames(sprintf("noise%s", seq_len(n_noise))) %>%
-    apply(., 2, function(col) {
-      tmp_fun <- sample(funs, 1)[[1]]
-      if (runif(1) > 0.5) {
-        col <- tmp_fun(col)
-      }
-      return(col)
-    })
+    set_colnames(sprintf("noise%s", seq_len(n_noise)))
 
   # TODO(tkrabel): Add correlated features
 
