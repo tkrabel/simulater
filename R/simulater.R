@@ -21,19 +21,20 @@
 #' @examples
 simulater <- function(n_obs,
                       n_vars,
-                      n_noise,
                       n_components,
                       max_order,
-                      stn,
-                      funs,
-                      fun_weights,
-                      fun_prob) {
+                      n_noise = 0,
+                      stn = 0.5,
+                      funs = NULL,
+                      fun_weights = NULL,
+                      fun_prob = 0) {
 
-  # args
   # Libs
   library(magrittr)
   library(dplyr)
   library(purrr)
+  library(glue)
+  # Test args
   funs <- list(pow2 = function(x) return(x^2),
                pow3 = function(x) return(x^3),
                sin = sin,
@@ -42,11 +43,17 @@ simulater <- function(n_obs,
   n_obs <- 4e5
   n_vars <- 3
   n_noise <- 10
+  n_correlated_vars <- 2
   n_components <- 5
   max_order <- 4
   stn <- 1
   fun_prob <- 0.5
   #
+
+  # TODO: handle fun_weight inputs
+  # TODO: handle funs inputs
+  stopifnot(n_obs > 0, n_vars > 0, n_noise > 0, n_components > 0, max_order > 0,
+            stn >= 0, fun_prob >= 0, fun_prob <= 1)
 
   # Features
   x_cols <- sprintf("x%s", 1:n_vars)
@@ -58,7 +65,8 @@ simulater <- function(n_obs,
   feature_names <- c(x_cols, feature_names)
   n_features    <- length(feature_names)
 
-  # Compute the weights of identity functions to have 50% change of being drawn
+  # Compute the weights of identity functions to have  (1 - funprob) % change of
+  # being drawn
   iweight <- (1 - fun_prob) / fun_prob * sum(fun_weights)
   pweight <- c(iweight, fun_weights) %>%
     rep(., each = n_vars)
@@ -96,21 +104,26 @@ simulater <- function(n_obs,
     gsub("(?<=^|\\+ )[^\\*]+\\*", "", ., perl = TRUE) %>% # Remove coefficients
     gsub(x = ., pat = "\\*", repl = ":")
 
-  # Noise: stn
-  sd_norm <- stn * mean(abs(true_y - median(true_y)))
-  target <- true_y + rnorm(n_obs, 0, sd_norm)
-
-  # Add final noise component
-  dgp <- sprintf("y ~ %s ~ N(0, %s)", form_x, round(sd_norm, 2))
-
   # Create noise
-  mat_noise <- matrix(rnorm(n_obs*n_noise), ncol = n_noise) %>%
-    set_colnames(sprintf("noise%s", seq_len(n_noise)))
+  mat_noise <- NULL
+  if (n_noise > 0) {
 
-  # TODO(tkrabel): Add correlated features
+    # Noise: stn
+    sd_norm <- stn * mean(abs(true_y - median(true_y)))
+    target <- true_y + rnorm(n_obs, 0, sd_norm)
+
+    # Add final noise component
+    dgp <- sprintf("y ~ -1 + %s ~ N(0, %s)", form_x, round(sd_norm, 2))
+
+    # Create noise
+    mat_noise <- matrix(rnorm(n_obs * n_noise), ncol = n_noise) %>%
+      set_colnames(sprintf("noise%s", seq_len(n_noise)))
+  }
+
+  # TODO: Create correlated features
 
   # Return final data frame
-  df_out <- data.frame(target, X, mat_noise)
+  df_out <- data.frame(target, X, mat_noise, mat_cor)
 
   df_out
 }
