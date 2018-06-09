@@ -14,10 +14,9 @@
 #' - a string describing the DGP formula
 #' - a data.frame containing the data generated from the DGP with n_obs observations
 #'
-#' @export
-#'
 #' @importFrom magrittr %>%, set_colnames
 #' @importFrom purrr map, map2
+#'
 #' @examples
 simulater <- function(n_obs,
                       n_vars,
@@ -29,30 +28,20 @@ simulater <- function(n_obs,
                       fun_weights = NULL,
                       fun_prob = 0) {
 
-  # Libs
-  library(magrittr)
-  library(dplyr)
-  library(purrr)
-  library(glue)
-  # Test args
-  funs <- list(pow2 = function(x) return(x^2),
-               pow3 = function(x) return(x^3),
-               sin = sin,
-               exp = exp)
-  fun_weights <- c(5, 5, 1, 2)
-  n_obs <- 4e5
-  n_vars <- 3
-  n_noise <- 10
-  n_correlated_vars <- 2
-  n_components <- 5
-  max_order <- 4
-  stn <- 1
-  fun_prob <- 0.5
-  #
+  # Warnings
+  if (is.null(funs) && fun_prob > 0) {
+    warning("'fun_prob' > 0 but no functions were passed as an argument")
+    fun_prob <- 0
+  }
 
-  # TODO: handle fun_weight inputs
-  # TODO: handle funs inputs
-  stopifnot(n_obs > 0, n_vars > 0, n_noise > 0, n_components > 0, max_order > 0,
+  if (n_components < n_vars)
+    warning("You have chosen 'n_components' < 'n_vars', which means that it
+            may be that not all variables are used in the formula")
+
+  # Errors
+  if (length(funs) != length(fun_weights))
+    stop("'funs' and 'fun_weights' must have same length")
+  stopifnot(n_obs > 0, n_vars > 0, n_noise >= 0, n_components > 0, max_order > 0,
             stn >= 0, fun_prob >= 0, fun_prob <= 1)
 
   # Features
@@ -67,7 +56,7 @@ simulater <- function(n_obs,
 
   # Compute the weights of identity functions to have  (1 - funprob) % change of
   # being drawn
-  iweight <- (1 - fun_prob) / fun_prob * sum(fun_weights)
+  iweight <- if (!fun_prob) 1 else (1 - fun_prob) / fun_prob * sum(fun_weights)
   pweight <- c(iweight, fun_weights) %>%
     rep(., each = n_vars)
 
@@ -79,9 +68,9 @@ simulater <- function(n_obs,
     .y = seq_len(length(orders)),
     function(order, i) {
       draw <- if (i <= n_vars) {
-        c(i, sample(seq_len(n_features)[-i], order - 1, prob = pweight[-i]))
+        c(i, sample(seq_len(n_features)[-i], order - 1, TRUE, prob = pweight[-i]))
       } else {
-        sample(seq_len(n_features), order, prob = pweight)
+        sample(seq_len(n_features), order, TRUE, prob = pweight)
       }
     }
   )
@@ -97,34 +86,32 @@ simulater <- function(n_obs,
   command <- gsub(x = form_x, pat = "x(\\d+)", repl = "X[,\\1]")
   true_y <- eval(parse(text = command))
 
-  # Change Formulo better reflect R formulas
+  # Change Formula to better reflect R formulas
   form_x <- form_x %>%
     gsub(x = ., pat = "funs\\$", repl = "I(") %>%         # Wrap functions in I()
     gsub(x = ., pat = ")", repl = "))") %>%
     gsub("(?<=^|\\+ )[^\\*]+\\*", "", ., perl = TRUE) %>% # Remove coefficients
     gsub(x = ., pat = "\\*", repl = ":")
 
+  # Noise: stn
+  sd_norm <- stn * mean(abs(true_y - median(true_y)))
+  target <- true_y + rnorm(n_obs, 0, sd_norm)
+
+  # Add final noise component
+  dgp <- sprintf("y ~ -1 + %s ~ N(0, %s)", form_x, round(sd_norm, 2))
+
   # Create noise
   mat_noise <- NULL
   if (n_noise > 0) {
-
-    # Noise: stn
-    sd_norm <- stn * mean(abs(true_y - median(true_y)))
-    target <- true_y + rnorm(n_obs, 0, sd_norm)
-
-    # Add final noise component
-    dgp <- sprintf("y ~ -1 + %s ~ N(0, %s)", form_x, round(sd_norm, 2))
-
     # Create noise
     mat_noise <- matrix(rnorm(n_obs * n_noise), ncol = n_noise) %>%
       set_colnames(sprintf("noise%s", seq_len(n_noise)))
   }
 
-  # TODO: Create correlated features
-
   # Return final data frame
-  df_out <- data.frame(target, X, mat_noise, mat_cor)
+  df_out <- as.data.frame(cbind(target, X, mat_noise))
 
-  df_out
+  list(data = df_out,
+       formula = dgp)
 }
 
