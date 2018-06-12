@@ -1,4 +1,4 @@
-#' Function to create data from arbitrary non-linear DGP
+#' Function to create a random DGP
 #'
 #' @param n_obs number of observations that shall be created
 #' @param n_vars number of inputs of the DGP
@@ -26,20 +26,19 @@ simulater <- function(n_obs,
                       stn = 0.5,
                       funs = NULL,
                       fun_weights = NULL,
-                      fun_prob = 0) {
+                      fun_prob = 0.5) {
 
   # Warnings
   if (is.null(funs) && fun_prob > 0) {
     warning("'fun_prob' > 0 but no functions were passed as an argument")
     fun_prob <- 0
   }
-
   if (n_components < n_vars)
     warning("You have chosen 'n_components' < 'n_vars', which means that it
             may be that not all variables are used in the formula")
 
   # Errors
-  if (length(funs) != length(fun_weights))
+  if (length(funs) != length(fun_weights) & !is.null(fun_weights))
     stop("'funs' and 'fun_weights' must have same length")
   stopifnot(n_obs > 0, n_vars > 0, n_noise >= 0, n_components > 0, max_order > 0,
             stn >= 0, fun_prob >= 0, fun_prob <= 1)
@@ -56,6 +55,7 @@ simulater <- function(n_obs,
 
   # Compute the weights of identity functions to have  (1 - funprob) % change of
   # being drawn
+  fun_weights <- if (!is.null(funs) && is.null(fun_weights)) rep(1, length(funs))
   iweight <- if (!fun_prob) 1 else (1 - fun_prob) / fun_prob * sum(fun_weights)
   pweight <- c(iweight, fun_weights) %>%
     rep(., each = n_vars)
@@ -91,7 +91,8 @@ simulater <- function(n_obs,
     gsub(x = ., pat = "funs\\$", repl = "I(") %>%         # Wrap functions in I()
     gsub(x = ., pat = ")", repl = "))") %>%
     gsub("(?<=^|\\+ )[^\\*]+\\*", "", ., perl = TRUE) %>% # Remove coefficients
-    gsub(x = ., pat = "\\*", repl = ":")
+    gsub(x = ., pat = "\\*", repl = ":") %>%
+    simplify_formula()
 
   # Noise: stn
   sd_norm <- stn * mean(abs(true_y - median(true_y)))
@@ -114,4 +115,3 @@ simulater <- function(n_obs,
   list(data = df_out,
        formula = dgp)
 }
-
